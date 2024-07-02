@@ -6,6 +6,7 @@
 from .cfa import Cfa
 from .cflow import Cflow
 from .csflow import Csflow
+from .ddad import DDAD
 from .dfkde import Dfkde
 from .dfm import Dfm
 from .draem import Draem
@@ -25,6 +26,7 @@ __all__ = [
     "Cfa",
     "Cflow",
     "Csflow",
+    "DDAD",
     "Dfkde",
     "Dfm",
     "Draem",

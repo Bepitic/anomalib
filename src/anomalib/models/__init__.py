@@ -14,6 +14,7 @@ from anomalib.models.components import AnomalyModule
 from anomalib.utils.path import convert_to_snake_case
 
 from .image import (
+    DDAD,
     Cfa,
     Cflow,
     Csflow,
@@ -43,6 +44,7 @@ __all__ = [
     "Cfa",
     "Cflow",
     "Csflow",
+    "DDAD",
     "Dfkde",
     "Dfm",
     "Draem",
