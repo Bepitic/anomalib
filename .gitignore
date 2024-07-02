@@ -21,6 +21,9 @@ notebooks/500_use_cases/501_dobot/
 .vscode
 .idea
 
+# Nvim lsp
+pyrightconfig.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
