@@ -9,20 +9,15 @@ from torch import nn
 
 
 class TimestepBlock(nn.Module):
-    """
-    Any module where forward() takes timestep embeddings as a second argument.
-    """
+    """Any module where forward() takes timestep embeddings as a second argument."""
 
     @abstractmethod
     def forward(self, x, emb):
-        """
-        Apply the module to `x` given `emb` timestep embeddings.
-        """
+        """Apply the module to `x` given `emb` timestep embeddings."""
 
 
 class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
-    """
-    A sequential module that passes timestep embeddings to the children that
+    """A sequential module that passes timestep embeddings to the children that
     support it as an extra input.
     """
 
@@ -37,9 +32,7 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
 
 class PositionalEmbedding(nn.Module):
     # PositionalEmbedding
-    """
-    Computes Positional Embedding of the timestep
-    """
+    """Computes Positional Embedding of the timestep"""
 
     def __init__(self, dim, scale=1):
         super().__init__()
@@ -93,8 +86,7 @@ class Upsample(nn.Module):
 
 
 class AttentionBlock(nn.Module):
-    """
-    An attention block that allows spatial positions to attend to each other.
+    """An attention block that allows spatial positions to attend to each other.
     Originally ported from here, but adapted to the N-d case.
     https://github.com/hojonathanho/diffusion/blob/1e0dceb3b3495bbe19116a5e1b3596cd0706c543/diffusion_tf/models/unet.py#L66.
     """
@@ -126,17 +118,14 @@ class AttentionBlock(nn.Module):
 
 
 class QKVAttention(nn.Module):
-    """
-    A module which performs QKV attention. Matches legacy QKVAttention + input/ouput heads shaping
-    """
+    """A module which performs QKV attention. Matches legacy QKVAttention + input/ouput heads shaping"""
 
     def __init__(self, n_heads):
         super().__init__()
         self.n_heads = n_heads
 
     def forward(self, qkv, time=None):
-        """
-        Apply QKV attention.
+        """Apply QKV attention.
         :param qkv: an [N x (H * 3 * C) x T] tensor of Qs, Ks, and Vs.
         :return: an [N x (H * C) x T] tensor after attention.
         """
@@ -156,7 +145,9 @@ class ResBlock(TimestepBlock):
         super().__init__()
         out_channels = out_channels or in_channels
         self.in_layers = nn.Sequential(
-            GroupNorm32(32, in_channels), nn.SiLU(), nn.Conv2d(in_channels, out_channels, 3, padding=1)
+            GroupNorm32(32, in_channels),
+            nn.SiLU(),
+            nn.Conv2d(in_channels, out_channels, 3, padding=1),
         )
         self.updown = up or down
 
@@ -207,9 +198,7 @@ class GroupNorm32(nn.GroupNorm):
 
 
 def zero_module(module):
-    """
-    Zero out the parameters of a module and return it.
-    """
+    """Zero out the parameters of a module and return it."""
     for p in module.parameters():
         p.detach().zero_()
     return module

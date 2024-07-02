@@ -7,16 +7,16 @@ import math
 
 import torch
 import torch.nn.functional as F
-from .ddad_orig.dataset import *
-from .feature_extractor import *
 from kornia.filters import gaussian_blur2d
 from torchvision.transforms import transforms
+
+from .ddad_orig.dataset import *
 from .ddad_orig.visualize import *
+from .feature_extractor import *
 
 
 def heat_map(output, target, FE, config):
-    """
-    Compute the anomaly map
+    """Compute the anomaly map
     :param output: the output of the reconstruction
     :param target: the target image
     :param FE: the feature extractor
@@ -42,20 +42,19 @@ def heat_map(output, target, FE, config):
 
 
 def pixel_distance(output, target):
-    """
-    Pixel distance between image1 and image2
-    """
+    """Pixel distance between image1 and image2"""
     distance_map = torch.mean(torch.abs(output - target), dim=1).unsqueeze(1)
     return distance_map
 
 
 def feature_distance(output, target, FE, config):
-    """
-    Feature distance between output and target
-    """
+    """Feature distance between output and target"""
     FE.eval()
     transform = transforms.Compose(
-        [transforms.Lambda(lambda t: (t + 1) / (2)), transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
+        [
+            transforms.Lambda(lambda t: (t + 1) / (2)),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        ],
     )
     target = transform(target)
     output = transform(output)
@@ -76,8 +75,10 @@ def feature_distance(output, target, FE, config):
 # https://github.com/amazon-science/patchcore-inspection
 def patchify(features, return_spatial_info=False):
     """Convert a tensor into a tensor of respective patches.
+
     Args:
         x: [torch.Tensor, bs x c x w x h]
+
     Returns:
         x: [torch.Tensor, bs * w//stride * h//stride, c, patchsize,
         patchsize]

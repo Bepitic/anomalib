@@ -1,20 +1,18 @@
 import logging
-# import os
 
+# import os
 import torch
-from .ddad_orig.dataset import (
-    Dataset_maker,
-)
 from torch import nn
-from .reconstruction import (
-    Reconstruction,
-)
+from torchvision.transforms import transforms
+
 from .ddad_orig.resnet import (
     resnet50,
     wide_resnet50_2,
     wide_resnet101_2,
 )
-from torchvision.transforms import transforms
+from .reconstruction import (
+    Reconstruction,
+)
 
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2"
 
@@ -67,22 +65,22 @@ def domain_adaptation(unet, config, fine_tune):
         [
             transforms.Lambda(lambda t: (t + 1) / (2)),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-        ]
+        ],
     )
 
     optimizer = torch.optim.AdamW(feature_extractor.parameters(), lr=1e-4)
     torch.save(
         frozen_feature_extractor.state_dict(),
-        os.path.join(os.path.join(os.getcwd(), config.model.checkpoint_dir), config.data.category, f"feat0"),
+        os.path.join(os.path.join(os.getcwd(), config.model.checkpoint_dir), config.data.category, "feat0"),
     )
     reconstruction = Reconstruction(unet)
     for epoch in range(config.model.DA_epochs):
         for _, batch in enumerate(trainloader):
             half_batch_size = batch[0].shape[0] // 2
-            target = batch[0][:half_batch_size]#.to(config.model.device)
-            input = batch[0][half_batch_size:]#.to(config.model.device)
+            target = batch[0][:half_batch_size]  # .to(config.model.device)
+            input = batch[0][half_batch_size:]  # .to(config.model.device)
 
-            x0 = reconstruction(input, target, config.model.w_DA)[-1]#.to(config.model.device)
+            x0 = reconstruction(input, target, config.model.w_DA)[-1]  # .to(config.model.device)
             x0 = transform(x0)
             target = transform(target)
 
@@ -134,10 +132,10 @@ class DomainAdaptationModel(nn.Module):
         # Define optimizer
         self.optimizer = torch.optim.AdamW(self.feature_extractor.parameters(), lr=1e-4)
 
-    def setup_reconstruction(self, unet):# , config):
+    def setup_reconstruction(self, unet):  # , config):
         self.unet = unet
         # Reconstruction module
-        self.reconstruction = Reconstruction(unet)#, config)
+        self.reconstruction = Reconstruction(unet)  # , config)
 
     def forward(self, input, target):
         # Apply transformations
@@ -145,7 +143,7 @@ class DomainAdaptationModel(nn.Module):
             [
                 transforms.Lambda(lambda t: (t + 1) / (2)),
                 transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-            ]
+            ],
         )
 
         x0 = self.reconstruction(input, target, self.config.model.w_DA)[-1]  # .to(self.config.model.device)
@@ -168,7 +166,7 @@ class DomainAdaptationModel(nn.Module):
         loss3 = 0
         for item in range(len(a)):
             loss1 += torch.mean(
-                1 - self.cos_loss(a[item].view(a[item].shape[0], -1), b[item].view(b[item].shape[0], -1))
+                1 - self.cos_loss(a[item].view(a[item].shape[0], -1), b[item].view(b[item].shape[0], -1)),
             )
             loss2 += (
                 torch.mean(1 - self.cos_loss(b[item].view(b[item].shape[0], -1), c[item].view(c[item].shape[0], -1)))

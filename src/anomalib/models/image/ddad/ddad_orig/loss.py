@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-import torch.nn as nn
 
 
 def get_loss(model, x_0, t, config):

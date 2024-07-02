@@ -1,40 +1,43 @@
-from asyncio import constants
 from typing import Any
+
 import torch
-from .unet import *
-from .dataset import *
-from .visualize import *
+
 from .anomaly_map import *
-from .metrics import *
+from .dataset import *
 from .feature_extractor import domain_adaptation
+from .metrics import *
 from .reconstruction import *
+from .unet import *
+from .visualize import *
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2"
 
 
 class DDAD:
     def __init__(self, unet, config) -> None:
+
         self.test_dataset = Dataset_maker(
-            root=config.data.data_dir,
-            category=config.data.category,
-            config=config,
-            is_train=False,
-        )
+                root=config.data.data_dir,
+                category=config.data.category,
+                config=config,
+                is_train=False,
+                )
+
         self.testloader = torch.utils.data.DataLoader(
-            self.test_dataset,
-            batch_size=config.data.test_batch_size,
-            shuffle=False,
-            num_workers=config.model.num_workers,
-            drop_last=False,
-        )
+                self.test_dataset,
+                batch_size=config.data.test_batch_size,
+                shuffle=False,
+                num_workers=config.model.num_workers,
+                drop_last=False,
+                )
         self.unet = unet
         self.config = config
         self.reconstruction = Reconstruction(self.unet, self.config)
         self.transform = transforms.Compose(
-            [
-                transforms.CenterCrop((224)),
-            ]
-        )
+                [
+                    transforms.CenterCrop(224),
+                    ],
+                )
 
     def __call__(self) -> Any:
         feature_extractor = domain_adaptation(self.unet, self.config, fine_tune=False)
@@ -68,9 +71,9 @@ class DDAD:
         metric = Metric(labels_list, predictions, anomaly_map_list, gt_list, self.config)
         metric.optimal_threshold()
         if self.config.metrics.auroc:
-            print("AUROC: ({:.1f},{:.1f})".format(metric.image_auroc() * 100, metric.pixel_auroc() * 100))
+            print(f"AUROC: ({metric.image_auroc() * 100:.1f},{metric.pixel_auroc() * 100:.1f})")
         if self.config.metrics.pro:
-            print("PRO: {:.1f}".format(metric.pixel_pro() * 100))
+            print(f"PRO: {metric.pixel_pro() * 100:.1f}")
         if self.config.metrics.misclassifications:
             metric.miscalssified()
         reconstructed_list = torch.cat(reconstructed_list, dim=0)

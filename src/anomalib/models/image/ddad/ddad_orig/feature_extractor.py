@@ -2,6 +2,8 @@ import logging
 import os
 
 import torch
+from torchvision.transforms import transforms
+
 from .dataset import (
     Dataset_maker,
 )
@@ -13,7 +15,6 @@ from .resnet import (
     wide_resnet50_2,
     wide_resnet101_2,
 )
-from torchvision.transforms import transforms
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2"
 
@@ -81,13 +82,13 @@ def domain_adaptation(unet, config, fine_tune):
             [
                 transforms.Lambda(lambda t: (t + 1) / (2)),
                 transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-            ]
+            ],
         )
 
         optimizer = torch.optim.AdamW(feature_extractor.parameters(), lr=1e-4)
         torch.save(
             frozen_feature_extractor.state_dict(),
-            os.path.join(os.path.join(os.getcwd(), config.model.checkpoint_dir), config.data.category, f"feat0"),
+            os.path.join(os.path.join(os.getcwd(), config.model.checkpoint_dir), config.data.category, "feat0"),
         )
         reconstruction = Reconstruction(unet, config)
         for epoch in range(config.model.DA_epochs):
@@ -116,7 +117,9 @@ def domain_adaptation(unet, config, fine_tune):
             torch.save(
                 feature_extractor.state_dict(),
                 os.path.join(
-                    os.path.join(os.getcwd(), config.model.checkpoint_dir), config.data.category, f"feat{epoch+1}"
+                    os.path.join(os.getcwd(), config.model.checkpoint_dir),
+                    config.data.category,
+                    f"feat{epoch+1}",
                 ),
             )
     else:
@@ -125,7 +128,7 @@ def domain_adaptation(unet, config, fine_tune):
                 os.path.join(os.getcwd(), config.model.checkpoint_dir),
                 config.data.category,
                 f"feat{config.model.DA_chp}",
-            )
+            ),
         )  # {config.model.DA_chp}
         feature_extractor.load_state_dict(checkpoint)
     return feature_extractor

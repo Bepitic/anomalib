@@ -5,7 +5,7 @@
 
 import numpy as np
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 class DDADLoss(nn.Module):
@@ -43,7 +43,6 @@ class DDADLoss(nn.Module):
         Returns:
             Tensor: Total loss
         """
-
         return (e - output).square().sum(dim=(1, 2, 3)).mean(dim=0)
 
 
@@ -61,7 +60,7 @@ class DomainAdaptationLoss(nn.Module):
         for item in range(len(a)):
             # Use self.cos_loss directly
             loss1 += torch.mean(
-                1 - self.cos_loss(a[item].view(a[item].shape[0], -1), b[item].view(b[item].shape[0], -1))
+                1 - self.cos_loss(a[item].view(a[item].shape[0], -1), b[item].view(b[item].shape[0], -1)),
             )
             loss2 += (
                 torch.mean(1 - self.cos_loss(b[item].view(b[item].shape[0], -1), c[item].view(c[item].shape[0], -1)))

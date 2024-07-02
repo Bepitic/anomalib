@@ -1,12 +1,14 @@
-import torch
-import numpy as np
-import os
 import argparse
-from .unet import *
+import os
+
+import numpy as np
+import torch
 from omegaconf import OmegaConf
-from .train import trainer
-from .feature_extractor import *
+
 from .ddad import *
+from .feature_extractor import *
+from .train import trainer
+from .unet import *
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2"
 
@@ -33,13 +35,13 @@ def train(config):
 def detection(config):
     unet = build_model(config)
     checkpoint = torch.load(
-        os.path.join(os.getcwd(), config.model.checkpoint_dir, config.data.category, str(config.model.load_chp))
+        os.path.join(os.getcwd(), config.model.checkpoint_dir, config.data.category, str(config.model.load_chp)),
     )
     unet = torch.nn.DataParallel(unet)
     unet.load_state_dict(checkpoint)
     unet.to(config.model.device)
     checkpoint = torch.load(
-        os.path.join(os.getcwd(), config.model.checkpoint_dir, config.data.category, str(config.model.load_chp))
+        os.path.join(os.getcwd(), config.model.checkpoint_dir, config.data.category, str(config.model.load_chp)),
     )
     unet.eval()
     ddad = DDAD(unet, config)
@@ -49,7 +51,7 @@ def detection(config):
 def finetuning(config):
     unet = build_model(config)
     checkpoint = torch.load(
-        os.path.join(os.getcwd(), config.model.checkpoint_dir, config.data.category, str(config.model.load_chp))
+        os.path.join(os.getcwd(), config.model.checkpoint_dir, config.data.category, str(config.model.load_chp)),
     )
     unet = torch.nn.DataParallel(unet)
     unet.load_state_dict(checkpoint)

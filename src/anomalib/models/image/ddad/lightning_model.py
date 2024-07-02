@@ -13,7 +13,6 @@ from typing import Any
 
 import torch
 from lightning.pytorch.utilities.types import STEP_OUTPUT
-from torchvision.transforms import transforms
 
 from anomalib import LearningType
 from anomalib.models.components import AnomalyModule
@@ -23,10 +22,10 @@ from anomalib.models.image.ddad.torch_model import UNetModel
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["DDAD"]
+__all__ = ["Ddad"]
 
 
-class DDAD(AnomalyModule):
+class Ddad(AnomalyModule):
     """DDAD: Anomaly Detection with Conditioned Denoising Diffusion Models.
 
     Args:
@@ -35,34 +34,26 @@ class DDAD(AnomalyModule):
     """
 
     def __init__(
-        self,
-        img_size,
-        base_channels,
-        conv_resample=True,
-        n_heads=1,
-        n_head_channels=-1,
-        channel_mults='',
-        num_res_blocks=2,
-        dropout=0,
-        attention_resolutions='32,16,8',
-        biggan_updown=True,
-        in_channels=1,
-    ) -> None:
+            self,
+            img_size:int =256,
+            trajectory_steps:int = 1000,
+            ) -> None:
         super().__init__()
-        self.model: UNetModel = UNetModel(
-            img_size=img_size,
-            base_channels=base_channels,
-            conv_resample=conv_resample,
-            n_heads=n_heads,
-            n_head_channels=n_head_channels,
-            channel_mults=channel_mults,
-            num_res_blocks=num_res_blocks,
-            dropout=dropout,
-            attention_resolutions=attention_resolutions,
-            biggan_updown=biggan_updown,
-            in_channels=in_channels,
-        )
-        trajectory_steps = 1000
+        self.model: UNetModel = UNetModel( img_size=img_size, base_channels=64,  n_heads=4, dropout=0.0, in_channels=3,
+                                          )
+        # img_size,
+        # base_channels,
+        # conv_resample=True,
+        # n_heads=1,
+        # n_head_channels=-1,
+        # channel_mults="",
+        # num_res_blocks=2,
+        # dropout=0,
+        # attention_resolutions="32,16,8",
+        # biggan_updown=True,
+        # in_channels=1,
+
+
 
         self.trajectory_steps = trajectory_steps
 
@@ -74,7 +65,6 @@ class DDAD(AnomalyModule):
     def on_train_start(self) -> None:
         """Initialize the centroid for the memory bank computation."""
         # self.model.initialize_centroid(data_loader=self.trainer.datamodule.train_dataloader()) this is from otehr model? TODO
-        pass
 
     def training_step(self, batch: dict[str, str | torch.Tensor], *args, **kwargs) -> STEP_OUTPUT:
         """Perform the training step for the DDAD model.
@@ -110,9 +100,9 @@ class DDAD(AnomalyModule):
             input_x = batch[0][half_batch_size:]  # .to(config.model.device)
 
             reconst_fe, target_fe, target_frozen_fe, reconst_frozen_fe = self.domain_adaptation_model(
-                target=target,
-                input=input_x,
-            )
+                    target=target,
+                    input=input_x,
+                    )
 
             loss = self.loss_domain_adaptation(a=reconst_fe, b=target_fe, c=target_frozen_fe, d=reconst_frozen_fe)
             return {"loss-domain_adaptation": loss}
@@ -134,12 +124,10 @@ class DDAD(AnomalyModule):
 
     def on_test_start(self) -> None:
         """Perform the start of test of DDAD model."""
-
         self.domain_adaptation_model.eval()
 
     def test_step(self, batch: dict[str, str | torch.Tensor], *args, **kwargs) -> None:
         """Perform the test step of DDAD model."""
-
         labels_list = []
         predictions = []
         anomaly_map_list = []
@@ -168,9 +156,9 @@ class DDAD(AnomalyModule):
         metric = Metric(labels_list, predictions, anomaly_map_list, gt_list, self.config)
         metric.optimal_threshold()
         if self.config.metrics.auroc:
-            print("AUROC: ({:.1f},{:.1f})".format(metric.image_auroc() * 100, metric.pixel_auroc() * 100))
+            print(f"AUROC: ({metric.image_auroc() * 100:.1f},{metric.pixel_auroc() * 100:.1f})")
         if self.config.metrics.pro:
-            print("PRO: {:.1f}".format(metric.pixel_pro() * 100))
+            print(f"PRO: {metric.pixel_pro() * 100:.1f}")
         if self.config.metrics.misclassifications:
             metric.miscalssified()
         reconstructed_list = torch.cat(reconstructed_list, dim=0)
@@ -198,7 +186,7 @@ class DDAD(AnomalyModule):
     def on_epoch_end(self) -> None:
         """DDAD functionality when finishing epoch."""
         if self.current_epoch == self.half:
-            self.domain_adaptation_model.setup_reconstruction(self.model)#, self.config)
+            self.domain_adaptation_model.setup_reconstruction(self.model)  # , self.config)
             self.train_unet = False
 
     @property
@@ -213,11 +201,11 @@ class DDAD(AnomalyModule):
             Optimizer: Adam optimizer
         """
         return torch.optim.AdamW(
-            params=self.model.parameters(),
-            lr=1e-3,
-            weight_decay=5e-4,
-            amsgrad=True,
-        )
+                params=self.model.parameters(),
+                lr=1e-3,
+                weight_decay=5e-4,
+                amsgrad=True,
+                )
 
     @property
     def learning_type(self) -> LearningType:

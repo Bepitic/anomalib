@@ -1,23 +1,23 @@
 # Not Important
-import torch
 import os
-import torch.nn as nn
-from .dataset import *
+
+import torch
 
 from .dataset import *
 from .loss import *
 
 
 def trainer(model, category, config):
-    """
-    Training the UNet model
+    """Training the UNet model
     :param model: the UNet model
     :param category: the category of the dataset
     """
     # optimizer = torch.optim.AdamW(
     #     model.parameters(), lr=config.model.learning_rate)
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=config.model.learning_rate, weight_decay=config.model.weight_decay
+        model.parameters(),
+        lr=config.model.learning_rate,
+        weight_decay=config.model.weight_decay,
     )
     train_dataset = Dataset_maker(
         root=config.data.data_dir,

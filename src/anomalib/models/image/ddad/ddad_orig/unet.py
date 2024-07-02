@@ -9,20 +9,15 @@ from torch import nn
 
 
 class TimestepBlock(nn.Module):
-    """
-    Any module where forward() takes timestep embeddings as a second argument.
-    """
+    """Any module where forward() takes timestep embeddings as a second argument."""
 
     @abstractmethod
     def forward(self, x, emb):
-        """
-        Apply the module to `x` given `emb` timestep embeddings.
-        """
+        """Apply the module to `x` given `emb` timestep embeddings."""
 
 
 class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
-    """
-    A sequential module that passes timestep embeddings to the children that
+    """A sequential module that passes timestep embeddings to the children that
     support it as an extra input.
     """
 
@@ -37,9 +32,7 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
 
 class PositionalEmbedding(nn.Module):
     # PositionalEmbedding
-    """
-    Computes Positional Embedding of the timestep
-    """
+    """Computes Positional Embedding of the timestep"""
 
     def __init__(self, dim, scale=1):
         super().__init__()
@@ -93,8 +86,7 @@ class Upsample(nn.Module):
 
 
 class AttentionBlock(nn.Module):
-    """
-    An attention block that allows spatial positions to attend to each other.
+    """An attention block that allows spatial positions to attend to each other.
     Originally ported from here, but adapted to the N-d case.
     https://github.com/hojonathanho/diffusion/blob/1e0dceb3b3495bbe19116a5e1b3596cd0706c543/diffusion_tf/models/unet.py#L66.
     """
@@ -107,7 +99,7 @@ class AttentionBlock(nn.Module):
             self.num_heads = n_heads
         else:
             assert (
-                    in_channels % n_head_channels == 0
+                in_channels % n_head_channels == 0
             ), f"q,k,v channels {in_channels} is not divisible by num_head_channels {n_head_channels}"
             self.num_heads = in_channels // n_head_channels
 
@@ -126,17 +118,14 @@ class AttentionBlock(nn.Module):
 
 
 class QKVAttention(nn.Module):
-    """
-    A module which performs QKV attention. Matches legacy QKVAttention + input/ouput heads shaping
-    """
+    """A module which performs QKV attention. Matches legacy QKVAttention + input/ouput heads shaping"""
 
     def __init__(self, n_heads):
         super().__init__()
         self.n_heads = n_heads
 
     def forward(self, qkv, time=None):
-        """
-        Apply QKV attention.
+        """Apply QKV attention.
         :param qkv: an [N x (H * 3 * C) x T] tensor of Qs, Ks, and Vs.
         :return: an [N x (H * C) x T] tensor after attention.
         """
@@ -146,8 +135,10 @@ class QKVAttention(nn.Module):
         q, k, v = qkv.reshape(bs * self.n_heads, ch * 3, length).split(ch, dim=1)
         scale = 1 / math.sqrt(math.sqrt(ch))
         weight = torch.einsum(
-                "bct,bcs->bts", q * scale, k * scale
-                )  # More stable with f16 than dividing afterwards
+            "bct,bcs->bts",
+            q * scale,
+            k * scale,
+        )  # More stable with f16 than dividing afterwards
         weight = torch.softmax(weight.float(), dim=-1).type(weight.dtype)
         a = torch.einsum("bts,bcs->bct", weight, v)
         return a.reshape(bs, -1, length)
@@ -155,22 +146,22 @@ class QKVAttention(nn.Module):
 
 class ResBlock(TimestepBlock):
     def __init__(
-            self,
-            in_channels,
-            time_embed_dim,
-            dropout,
-            out_channels=None,
-            use_conv=False,
-            up=False,
-            down=False
-            ):
+        self,
+        in_channels,
+        time_embed_dim,
+        dropout,
+        out_channels=None,
+        use_conv=False,
+        up=False,
+        down=False,
+    ):
         super().__init__()
         out_channels = out_channels or in_channels
         self.in_layers = nn.Sequential(
-                GroupNorm32(32, in_channels),
-                nn.SiLU(),
-                nn.Conv2d(in_channels, out_channels, 3, padding=1)
-                )
+            GroupNorm32(32, in_channels),
+            nn.SiLU(),
+            nn.Conv2d(in_channels, out_channels, 3, padding=1),
+        )
         self.updown = up or down
 
         if up:
@@ -183,15 +174,15 @@ class ResBlock(TimestepBlock):
             self.h_upd = self.x_upd = nn.Identity()
 
         self.embed_layers = nn.Sequential(
-                nn.SiLU(),
-                nn.Linear(time_embed_dim, out_channels)
-                )
+            nn.SiLU(),
+            nn.Linear(time_embed_dim, out_channels),
+        )
         self.out_layers = nn.Sequential(
-                GroupNorm32(32, out_channels),
-                nn.SiLU(),
-                nn.Dropout(p=dropout),
-                zero_module(nn.Conv2d(out_channels, out_channels, 3, padding=1))
-                )
+            GroupNorm32(32, out_channels),
+            nn.SiLU(),
+            nn.Dropout(p=dropout),
+            zero_module(nn.Conv2d(out_channels, out_channels, 3, padding=1)),
+        )
         if out_channels == in_channels:
             self.skip_connection = nn.Identity()
         elif use_conv:
@@ -220,19 +211,19 @@ class ResBlock(TimestepBlock):
 class UNetModel(nn.Module):
     # UNet model
     def __init__(
-            self,
-            img_size,
-            base_channels,
-            conv_resample=True,
-            n_heads=1,
-            n_head_channels=-1,
-            channel_mults="",
-            num_res_blocks=2,
-            dropout=0,
-            attention_resolutions="32,16,8",
-            biggan_updown=True,
-            in_channels=1
-            ):
+        self,
+        img_size,
+        base_channels,
+        conv_resample=True,
+        n_heads=1,
+        n_head_channels=-1,
+        channel_mults="",
+        num_res_blocks=2,
+        dropout=0,
+        attention_resolutions="32,16,8",
+        biggan_updown=True,
+        in_channels=1,
+    ):
         self.dtype = torch.float32
         super().__init__()
 
@@ -240,7 +231,7 @@ class UNetModel(nn.Module):
             if img_size == 512:
                 channel_mults = (0.5, 1, 1, 2, 2, 4, 4)
             elif img_size == 256:
-                channel_mults = (1, 1, 2, 2, 4, 4)# 
+                channel_mults = (1, 1, 2, 2, 4, 4)  #
             elif img_size == 128:
                 channel_mults = (1, 1, 2, 3, 4)
             elif img_size == 64:
@@ -269,78 +260,79 @@ class UNetModel(nn.Module):
 
         time_embed_dim = base_channels * 4
         self.time_embedding = nn.Sequential(
-                PositionalEmbedding(base_channels, 1),
-                nn.Linear(base_channels, time_embed_dim),
-                nn.SiLU(),
-                nn.Linear(time_embed_dim, time_embed_dim),
-                )
+            PositionalEmbedding(base_channels, 1),
+            nn.Linear(base_channels, time_embed_dim),
+            nn.SiLU(),
+            nn.Linear(time_embed_dim, time_embed_dim),
+        )
 
         ch = int(channel_mults[0] * base_channels)
         self.down = nn.ModuleList(
-                [TimestepEmbedSequential(nn.Conv2d(self.in_channels, base_channels, 3, padding=1))]
-                )
+            [TimestepEmbedSequential(nn.Conv2d(self.in_channels, base_channels, 3, padding=1))],
+        )
         channels = [ch]
         ds = 1
         for i, mult in enumerate(channel_mults):
             # out_channels = base_channels * mult
 
             for _ in range(num_res_blocks):
-                layers = [ResBlock(
+                layers = [
+                    ResBlock(
                         ch,
                         time_embed_dim=time_embed_dim,
                         out_channels=base_channels * mult,
                         dropout=dropout,
-                        )]
+                    ),
+                ]
                 ch = base_channels * mult
                 # channels.append(ch)
 
                 if ds in attention_ds:
                     layers.append(
-                            AttentionBlock(
-                                    ch,
-                                    n_heads=n_heads,
-                                    n_head_channels=n_head_channels,
-                                    )
-                            )
+                        AttentionBlock(
+                            ch,
+                            n_heads=n_heads,
+                            n_head_channels=n_head_channels,
+                        ),
+                    )
                 self.down.append(TimestepEmbedSequential(*layers))
                 channels.append(ch)
             if i != len(channel_mults) - 1:
                 out_channels = ch
                 self.down.append(
-                        TimestepEmbedSequential(
-                                ResBlock(
-                                        ch,
-                                        time_embed_dim=time_embed_dim,
-                                        out_channels=out_channels,
-                                        dropout=dropout,
-                                        down=True
-                                        )
-                                if biggan_updown
-                                else
-                                Downsample(ch, conv_resample, out_channels=out_channels)
-                                )
+                    TimestepEmbedSequential(
+                        ResBlock(
+                            ch,
+                            time_embed_dim=time_embed_dim,
+                            out_channels=out_channels,
+                            dropout=dropout,
+                            down=True,
                         )
+                        if biggan_updown
+                        else Downsample(ch, conv_resample, out_channels=out_channels),
+                    ),
+                )
                 ds *= 2
                 ch = out_channels
                 channels.append(ch)
 
         self.middle = TimestepEmbedSequential(
-                ResBlock(
-                        ch,
-                        time_embed_dim=time_embed_dim,
-                        dropout=dropout
-                        ),
-                AttentionBlock(
-                        ch,
-                        n_heads=n_heads,
-                        n_head_channels=n_head_channels
-                        ),
-                ResBlock(
-                        ch,
-                        time_embed_dim=time_embed_dim,
-                        dropout=dropout
-                        )
-                )
+            ResBlock(
+                ch,
+                time_embed_dim=time_embed_dim,
+                dropout=dropout,
+            ),
+            AttentionBlock(
+                ch,
+                n_heads=n_heads,
+                n_head_channels=n_head_channels,
+            ),
+            ResBlock(
+                ch,
+                time_embed_dim=time_embed_dim,
+                dropout=dropout,
+            ),
+        )
         self.up = nn.ModuleList([])
 
         for i, mult in reversed(list(enumerate(channel_mults))):
@@ -348,47 +340,45 @@ class UNetModel(nn.Module):
                 inp_chs = channels.pop()
                 layers = [
                     ResBlock(
-                            ch + inp_chs,
-                            time_embed_dim=time_embed_dim,
-                            out_channels=base_channels * mult,
-                            dropout=dropout
-                            )
-                    ]
+                        ch + inp_chs,
+                        time_embed_dim=time_embed_dim,
+                        out_channels=base_channels * mult,
+                        dropout=dropout,
+                    ),
+                ]
                 ch = base_channels * mult
                 if ds in attention_ds:
                     layers.append(
-                            AttentionBlock(
-                                    ch,
-                                    n_heads=n_heads,
-                                    n_head_channels=n_head_channels
-                                    ),
-                            )
+                        AttentionBlock(
+                            ch,
+                            n_heads=n_heads,
+                            n_head_channels=n_head_channels,
+                        ),
+                    )
 
                 if i and j == num_res_blocks:
                     out_channels = ch
                     layers.append(
-                            ResBlock(
-                                    ch,
-                                    time_embed_dim=time_embed_dim,
-                                    out_channels=out_channels,
-                                    dropout=dropout,
-                                    up=True
-                                    )
-                            if biggan_updown
-                            else
-                            Upsample(ch, conv_resample, out_channels=out_channels)
-                            )
+                        ResBlock(
+                            ch,
+                            time_embed_dim=time_embed_dim,
+                            out_channels=out_channels,
+                            dropout=dropout,
+                            up=True,
+                        )
+                        if biggan_updown
+                        else Upsample(ch, conv_resample, out_channels=out_channels),
+                    )
                     ds //= 2
                 self.up.append(TimestepEmbedSequential(*layers))
 
         self.out = nn.Sequential(
-                GroupNorm32(32, ch),
-                nn.SiLU(),
-                zero_module(nn.Conv2d(base_channels * channel_mults[0], self.out_channels, 3, padding=1))
-                )
+            GroupNorm32(32, ch),
+            nn.SiLU(),
+            zero_module(nn.Conv2d(base_channels * channel_mults[0], self.out_channels, 3, padding=1)),
+        )
 
     def forward(self, x, time):
-
         time_embed = self.time_embedding(time)
 
         skips = []
@@ -412,9 +402,7 @@ class GroupNorm32(nn.GroupNorm):
 
 
 def zero_module(module):
-    """
-    Zero out the parameters of a module and return it.
-    """
+    """Zero out the parameters of a module and return it."""
     for p in module.parameters():
         p.detach().zero_()
     return module
@@ -425,4 +413,3 @@ def update_ema_params(target, source, decay_rate=0.9999):
     srcParams = dict(source.named_parameters())
     for k in targParams:
         targParams[k].data.mul_(decay_rate).add_(srcParams[k].data, alpha=1 - decay_rate)
-

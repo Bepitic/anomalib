@@ -1,34 +1,33 @@
-import torch
-from torchmetrics import ROC, AUROC, F1Score
-import os
-from torchvision.transforms import transforms
-from skimage import measure
-import pandas as pd
 from statistics import mean
+
 import numpy as np
-from sklearn.metrics import auc
-from sklearn import metrics
-from sklearn.metrics import roc_auc_score, roc_curve
+import pandas as pd
+import torch
+from skimage import measure
+from sklearn.metrics import auc, roc_auc_score, roc_curve
+from torchmetrics import AUROC
 
 
 class Metric:
-    def __init__(self,labels_list, predictions, anomaly_map_list, gt_list, config) -> None:
+    def __init__(self, labels_list, predictions, anomaly_map_list, gt_list, config) -> None:
         self.labels_list = labels_list
         self.predictions = predictions
         self.anomaly_map_list = anomaly_map_list
         self.gt_list = gt_list
         self.config = config
         self.threshold = 0.5
-    
+
     def image_auroc(self):
         auroc_image = roc_auc_score(self.labels_list, self.predictions)
         return auroc_image
-    
+
     def pixel_auroc(self):
         resutls_embeddings = self.anomaly_map_list[0]
         for feature in self.anomaly_map_list[1:]:
             resutls_embeddings = torch.cat((resutls_embeddings, feature), 0)
-        resutls_embeddings =  ((resutls_embeddings - resutls_embeddings.min())/ (resutls_embeddings.max() - resutls_embeddings.min())) 
+        resutls_embeddings = (resutls_embeddings - resutls_embeddings.min()) / (
+            resutls_embeddings.max() - resutls_embeddings.min()
+        )
 
         gt_embeddings = self.gt_list[0]
         for feature in self.gt_list[1:]:
@@ -38,12 +37,12 @@ class Metric:
         gt_embeddings = gt_embeddings.clone().detach().requires_grad_(False)
 
         auroc_p = AUROC(task="binary")
-        
+
         gt_embeddings = torch.flatten(gt_embeddings).type(torch.bool).cpu().detach()
         resutls_embeddings = torch.flatten(resutls_embeddings).cpu().detach()
         auroc_pixel = auroc_p(resutls_embeddings, gt_embeddings)
         return auroc_pixel
-    
+
     def optimal_threshold(self):
         fpr, tpr, thresholds = roc_curve(self.labels_list, self.predictions)
 
@@ -55,15 +54,16 @@ class Metric:
         optimal_threshold = thresholds[optimal_threshold_index]
         self.threshold = optimal_threshold
         return optimal_threshold
-    
 
     def pixel_pro(self):
-        #https://github.com/hq-deng/RD4AD/blob/main/test.py#L337
-        def _compute_pro(masks, amaps, num_th = 200):
+        # https://github.com/hq-deng/RD4AD/blob/main/test.py#L337
+        def _compute_pro(masks, amaps, num_th=200):
             resutls_embeddings = amaps[0]
             for feature in amaps[1:]:
                 resutls_embeddings = torch.cat((resutls_embeddings, feature), 0)
-            amaps =  ((resutls_embeddings - resutls_embeddings.min())/ (resutls_embeddings.max() - resutls_embeddings.min())) 
+            amaps = (resutls_embeddings - resutls_embeddings.min()) / (
+                resutls_embeddings.max() - resutls_embeddings.min()
+            )
             amaps = amaps.squeeze(1)
             amaps = amaps.cpu().detach().numpy()
             gt_embeddings = masks[0]
@@ -89,11 +89,14 @@ class Metric:
                         pros.append(tp_pixels / region.area)
 
                 inverse_masks = 1 - masks
-                fp_pixels = np.logical_and(inverse_masks , binary_amaps).sum()
+                fp_pixels = np.logical_and(inverse_masks, binary_amaps).sum()
                 fpr = fp_pixels / inverse_masks.sum()
                 # print(f"Threshold: {th}, FPR: {fpr}, PRO: {mean(pros)}")
 
-                df = pd.concat([df, pd.DataFrame({"pro": mean(pros), "fpr": fpr, "threshold": th}, index=[0])], ignore_index=True)
+                df = pd.concat(
+                    [df, pd.DataFrame({"pro": mean(pros), "fpr": fpr, "threshold": th}, index=[0])],
+                    ignore_index=True,
+                )
                 # df = df.concat({"pro": mean(pros), "fpr": fpr, "threshold": th}, ignore_index=True)
 
             # Normalize FPR from 0 ~ 1 to 0 ~ 0.3
@@ -102,15 +105,13 @@ class Metric:
 
             pro_auc = auc(df["fpr"], df["pro"])
             return pro_auc
-        
-        pro = _compute_pro(self.gt_list, self.anomaly_map_list, num_th = 200)
+
+        pro = _compute_pro(self.gt_list, self.anomaly_map_list, num_th=200)
         return pro
-    
 
     def miscalssified(self):
         predictions = torch.tensor(self.predictions)
         labels_list = torch.tensor(self.labels_list)
         predictions0_1 = (predictions > self.threshold).int()
-        for i,(l,p) in enumerate(zip(labels_list, predictions0_1)):
-            print('Sample : ', i, ' predicted as: ',p.item() ,' label is: ',l.item(),'\n' ) if l != p else None
-
+        for i, (l, p) in enumerate(zip(labels_list, predictions0_1)):
+            print("Sample : ", i, " predicted as: ", p.item(), " label is: ", l.item(), "\n") if l != p else None

@@ -1,16 +1,15 @@
+import os
 from typing import Any
-import torch
 
 # from forward_process import *
 import numpy as np
-import os
+import torch
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2"
 
 
 class Reconstruction:
-    """
-    The reconstruction process
+    """The reconstruction process
     :param y: the target image
     :param x: the input image
     :param seq: the sequence of denoising steps
@@ -24,22 +23,24 @@ class Reconstruction:
     def __call__(self, x, y0, w) -> Any:
         def _compute_alpha(t):
             betas = np.linspace(
-                    0.0001,
-                    0.02,
-                    1000,
+                0.0001,
+                0.02,
+                1000,
                 dtype=np.float64,
             )
-            betas = torch.tensor(betas).type(torch.float) #.to(self.config.model.device)
-            beta = torch.cat([torch.zeros(1),betas],dim=0) # .to(self.config.model.device), betas], dim=0)
-            #beta = beta.to(self.config.model.device)
+            betas = torch.tensor(betas).type(torch.float)  # .to(self.config.model.device)
+            beta = torch.cat([torch.zeros(1), betas], dim=0)  # .to(self.config.model.device), betas], dim=0)
+            # beta = beta.to(self.config.model.device)
             a = (1 - beta).cumprod(dim=0).index_select(0, t + 1).view(-1, 1, 1, 1)
             return a
 
         test_trajectoy_steps = (
-            torch.Tensor([250]).type(torch.int64).long() #self.config.model.test_trajectoy_steps]).type(torch.int64).to(self.config.model.device).long()
+            torch.Tensor([250])
+            .type(torch.int64)
+            .long()  # self.config.model.test_trajectoy_steps]).type(torch.int64).to(self.config.model.device).long()
         )
         at = _compute_alpha(test_trajectoy_steps)
-        xt = at.sqrt() * x + (1 - at).sqrt() * torch.randn_like(x)# .to(self.config.model.device)
+        xt = at.sqrt() * x + (1 - at).sqrt() * torch.randn_like(x)  # .to(self.config.model.device)
         # seq = range(0, self.config.model.test_trajectoy_steps, self.config.model.skip)
         seq = range(0, 250, 25)
 
@@ -48,11 +49,11 @@ class Reconstruction:
             seq_next = [-1] + list(seq[:-1])
             xs = [xt]
             for _, (i, j) in enumerate(zip(reversed(seq), reversed(seq_next))):
-                t = (torch.ones(n) * i)# .to(self.config.model.device)
-                next_t = (torch.ones(n) * j)#.to(self.config.model.device)
+                t = torch.ones(n) * i  # .to(self.config.model.device)
+                next_t = torch.ones(n) * j  # .to(self.config.model.device)
                 at = _compute_alpha(t.long())
                 at_next = _compute_alpha(next_t.long())
-                xt = xs[-1]# .to(self.config.model.device)
+                xt = xs[-1]  # .to(self.config.model.device)
                 # self.unet = self.unet.to(self.config.model.device)
                 et = self.unet(xt, t)
                 yt = at.sqrt() * y0 + (1 - at).sqrt() * et
