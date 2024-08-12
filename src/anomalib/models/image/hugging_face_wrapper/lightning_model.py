@@ -12,8 +12,7 @@ import requests
 import torch
 from PIL import Image
 from torch.utils.data import DataLoader
-from torchvision.transforms.v2 import Compose, InterpolationMode, Normalize, Resize, Transform
-from transformers import AutoProcessor, LlavaNextForConditionalGeneration
+from transformers import AutoProcessor, LlavaForConditionalGeneration
 
 from anomalib import LearningType
 from anomalib.models.components import AnomalyModule
@@ -51,7 +50,7 @@ class HuggingFaceWrapper(AnomalyModule):
         self,
         k_shot: int = 0,
         temperature: float = 0.0,
-        model_path: str = "llava-hf/llava-v1.6-mistral-7b-hf",
+        model_path: str = "llava-hf/llava-interleave-qwen-7b-hf",
         load_8bits: bool = False,
         load_4bits: bool = False,
         max_new_tokens: int = 100,  # max 1024
@@ -63,16 +62,20 @@ class HuggingFaceWrapper(AnomalyModule):
         self.load4bits = load_4bits
         self.model_path = model_path
         self.max_new_tokens = max_new_tokens
+        self.pre_images: list[str] = []
 
-        self.model = LlavaNextForConditionalGeneration.from_pretrained(
-            model_path, torch_dtype=torch.float16, device_map="auto", load_in_4bit=self.load4bits
+        self.model = LlavaForConditionalGeneration.from_pretrained(
+            model_path,
+            torch_dtype=torch.float16,
+            device_map="auto",
+            load_in_4bit=self.load4bits,
         )
         self.processor = AutoProcessor.from_pretrained(model_path)
 
     def _setup(self) -> None:
         dataloader = self.trainer.datamodule.train_dataloader()
         pre_images = self.collect_reference_images(dataloader)
-        self.pre_images = pre_images
+        self.pre_images: list[str] = pre_images
 
     def training_step(self, batch: dict[str, str | torch.Tensor], *args, **kwargs) -> None:
         """Train Step of LLM."""
@@ -95,15 +98,15 @@ class HuggingFaceWrapper(AnomalyModule):
         for x in range(bsize):
             o = "NO - default"
             if self.k_shot > 0:
-                o = str(self.api_call_fewShot(self.pre_images, "", batch["image_path"][x])).strip()
+                o = self.api_call_few_shot(batch["image_path"][x])
             else:
-                o = str(self.api_call("", batch["image_path"][x])).strip()
+                o = str(self.api_call_zero_shot(batch["image_path"][x])).strip()
             p = 0.0 if o.startswith("N") else 1.0
             out_list.append(o)
             pred_list.append(p)
 
         batch["str_output"] = out_list
-        batch["pred_scores"] = torch.tensor(pred_list).to(self.model.device)
+        batch["pred_scores"] = torch.tensor(pred_list).to(self.device)
         return batch
 
     @property
@@ -145,61 +148,117 @@ class HuggingFaceWrapper(AnomalyModule):
             image = Image.open(image_file).convert("RGB")
         return image
 
-    def configure_transforms(self, image_size: tuple[int, int] | None = None) -> Transform:
-        """Configure the default transforms used by the model."""
-        if image_size is not None:
-            logger.warning("Image size is not used in WinCLIP. The input image size is determined by the model.")
-        return Compose(
-            [
-                Resize((520, 520), antialias=True, interpolation=InterpolationMode.BICUBIC),
-                Normalize(mean=(0.48145466, 0.4578275, 0.40821073), std=(0.26862954, 0.26130258, 0.27577711)),
-            ],
-        )
-
-    def api_call_fewShot(self, pre_images: str, prompt: str, image_path: str) -> str:
-        images = []
-        images_size = []
-
-        for img_path in pre_images:
-            i = self.load_image(img_path)
-            images_size.append(i.size)
-            images.append(i)
-
+    def api_call_zero_shot(self, image_path: str) -> str:
         img = self.load_image(image_path)
-        prompt = ""
-        preprompt = ""
 
-        promptend = "From this 2 images, the first one being a normal image, and the second one a possibly abnormal one Check if the second one diverges in an obvious abnormal form from the first one and report if there is an abnormality,  If the Object contains any defects, irregularities, or anomalies, respond with 'YES:description' where 'description' explains the specific defect(s) found, if there is not a defect then say NO, and stop."
+        prompt = """
+        Examine the provided image carefully to determine if there is an obvious anomaly present.
+        Anomalies may include mechanical malfunctions, unexpected objects, safety hazards, structural damages,
+        or unusual patterns or defects in the objects.
+
+        Instructions:
+
+        1. Thoroughly inspect the image for any irregularities or deviations from normal operating conditions.
+
+        2. Clearly state if an obvious anomaly is detected.
+        - If an anomaly is detected, begin with 'YES,' followed by a detailed description of the anomaly.
+        - If no anomaly is detected, simply state 'NO' and end the analysis.
+
+        Example Output Structure:
+
+        'YES:
+        - Description: Conveyor belt misalignment causing potential blockages.
+        This may result in production delays and equipment damage.
+        Immediate realignment and inspection are recommended.'
+
+        'NO'
+
+        Considerations:
+
+        - Ensure accuracy in identifying anomalies to prevent overlooking critical issues.
+        - Provide clear and concise descriptions for any detected anomalies.
+        - Focus on obvious anomalies that could impact final use of the object operation or safety.
+        """
 
         # Prepare a batch of two prompts, where the first one is a multi-turn conversation and the second is not
         conversation_1 = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": promptend},
-                    {"type": "image"},
+                    {"type": "text", "text": prompt},
                     {"type": "image"},
                 ],
             },
         ]
 
         prompt_1 = self.processor.apply_chat_template(conversation_1, add_generation_prompt=True)
-        prompts = [prompt_1]
+        inputs = self.processor(prompt_1, img, return_tensors="pt").to(self.device, torch.float16)
+        # Obtaining the len of the prompt in tokens.
+        token_len = inputs.input_ids.shape[1]
+        print("inputs")
+        print(type(inputs))
+        for key, value in inputs.items():
+            print(f"{key}: {value.shape}")
 
-        # We can simply feed images in the order they have to be used in the text prompt
-        # Each "<image>" token uses one image leaving the next for the subsequent "<image>" tokens
-        inputs = self.processor(text=prompts, images=[images[0], img], padding=False, return_tensors="pt").to(
-            self.model.device
+        outputs = self.model.generate(
+            **inputs,
+            max_new_tokens=200,
+            do_sample=False,
+            pad_token_id=self.processor.tokenizer.pad_token_id,
         )
-
-        # Generate
-        generate_ids = self.model.generate(
-            **inputs, max_new_tokens=300, pad_token_id=self.processor.tokenizer.pad_token_id
-        )
+        generated_outputs = outputs[:, token_len:]
         text_outputs = self.processor.batch_decode(
-            generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
+            generated_outputs,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=True,
         )
+        return text_outputs[0]
 
-        parts = text_outputs[0].split("[/INST]")
+    def api_call_few_shot(self, image_path: str) -> str:
+        images = []
+        i = self.load_image(image_path)
+        images.append(i)
+        for img_path in self.pre_images:
+            i = self.load_image(img_path)
+            images.append(i)
 
-        return parts[1].strip()
+        prompt = """
+You will receive a group of images that is going to be an example of the typical image without any anomaly,
+and the last image that you need to decide if it has an anomaly or not.
+Answer with a 'NO' if it does not have any anomalies and 'YES: description'
+where description is a description of the anomaly provided, position.
+"""
+
+        # Start with the text prompt
+        content = [{"type": "text", "text": prompt}]
+
+        # Dynamically add the specified number of image placeholders
+        for _ in range(len(images)):
+            content.append({"type": "image"})
+
+        # Prepare a batch of two prompts, where the first one is a multi-turn conversation and the second is not
+        conversation_1 = [
+            {
+                "role": "user",
+                "content": content,
+            },
+        ]
+
+        prompt_1 = self.processor.apply_chat_template(conversation_1, add_generation_prompt=True)
+        inputs = self.processor(prompt_1, images, return_tensors="pt").to(self.device, torch.float16)
+        # Obtaining the len of the prompt in tokens.
+        token_len = inputs.input_ids.shape[1]
+
+        outputs = self.model.generate(
+            **inputs,
+            max_new_tokens=200,
+            do_sample=False,
+            pad_token_id=self.processor.tokenizer.pad_token_id,
+        )
+        generated_outputs = outputs[:, token_len:]
+        text_outputs = self.processor.batch_decode(
+            generated_outputs,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=True,
+        )
+        return text_outputs[0]
