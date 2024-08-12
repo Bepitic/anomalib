@@ -6,9 +6,7 @@ Paper No paper
 # SPDX-License-Identifier: Apache-2.0
 
 import logging
-from io import BytesIO
 
-import requests
 import torch
 from PIL import Image
 from torch.utils.data import DataLoader
@@ -75,9 +73,9 @@ class HuggingFaceWrapper(AnomalyModule):
     def _setup(self) -> None:
         dataloader = self.trainer.datamodule.train_dataloader()
         pre_images = self.collect_reference_images(dataloader)
-        self.pre_images: list[str] = pre_images
+        self.pre_images = pre_images
 
-    def training_step(self, batch: dict[str, str | torch.Tensor], *args, **kwargs) -> None:
+    def training_step(self, batch: dict[str, str | torch.Tensor], *args, **kwargs) -> dict[str, str | torch.Tensor]:
         """Train Step of LLM."""
         del args, kwargs  # These variables are not used.
         # no train on llm
@@ -98,9 +96,9 @@ class HuggingFaceWrapper(AnomalyModule):
         for x in range(bsize):
             o = "NO - default"
             if self.k_shot > 0:
-                o = self.api_call_few_shot(batch["image_path"][x])
+                o = self._api_call_few_shot(batch["image_path"][x])
             else:
-                o = str(self.api_call_zero_shot(batch["image_path"][x])).strip()
+                o = self._api_call_zero_shot(batch["image_path"][x])
             p = 0.0 if o.startswith("N") else 1.0
             out_list.append(o)
             pred_list.append(p)
@@ -140,16 +138,11 @@ class HuggingFaceWrapper(AnomalyModule):
                 break
         return ref_images
 
-    def load_image(self, image_file: str) -> Image:
-        if image_file.startswith("http://") or image_file.startswith("https://"):
-            response = requests.get(image_file)
-            image = Image.open(BytesIO(response.content)).convert("RGB")
-        else:
-            image = Image.open(image_file).convert("RGB")
-        return image
+    def _load_image(self, image_file: str) -> Image.Image:
+        return Image.open(image_file).convert("RGB")
 
-    def api_call_zero_shot(self, image_path: str) -> str:
-        img = self.load_image(image_path)
+    def _api_call_zero_shot(self, image_path: str) -> str:
+        img = self._load_image(image_path)
 
         prompt = """
         Examine the provided image carefully to determine if there is an obvious anomaly present.
@@ -214,12 +207,12 @@ class HuggingFaceWrapper(AnomalyModule):
         )
         return text_outputs[0]
 
-    def api_call_few_shot(self, image_path: str) -> str:
+    def _api_call_few_shot(self, image_path: str) -> str:
         images = []
-        i = self.load_image(image_path)
+        i = self._load_image(image_path)
         images.append(i)
         for img_path in self.pre_images:
-            i = self.load_image(img_path)
+            i = self._load_image(img_path)
             images.append(i)
 
         prompt = """
@@ -231,10 +224,7 @@ where description is a description of the anomaly provided, position.
 
         # Start with the text prompt
         content = [{"type": "text", "text": prompt}]
-
-        # Dynamically add the specified number of image placeholders
-        for _ in range(len(images)):
-            content.append({"type": "image"})
+        content.extend([{"type": "image"} for _ in range(len(images))])
 
         # Prepare a batch of two prompts, where the first one is a multi-turn conversation and the second is not
         conversation_1 = [
