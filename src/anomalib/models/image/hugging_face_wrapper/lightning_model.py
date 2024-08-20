@@ -32,15 +32,17 @@ class HuggingFaceWrapper(AnomalyModule):
             Defaults to 0.
         temperature (float, optional): Temperature value to control the randomness of predictions.
             A higher value makes the model's output more random, while a lower value makes it more deterministic.
-            Defaults to 0.0.
+            Defaults to `0.0`.
         model_path (str, optional): Path or identifier of the model to load from HuggingFace.
-            Defaults to "llava-hf/llava-v1.6-mistral-7b-hf".
-        load_8bits (bool, optional): Flag to indicate whether to load the model in 8-bit precision.
-            Useful for reducing memory usage. Defaults to False.
+            Defaults to `llava-hf/llava-v1.6-mistral-7b-hf`.
+        load_8bits (bool, optional): Flag to indicate whether to load the model in 8-bit precision. Useful for reducing memory usage. 
+            Defaults to `False`.
         load_4bits (bool, optional): Flag to indicate whether to load the model in 4-bit precision.
-            Further reduces memory usage compared to 8-bit precision. Defaults to False.
+            Further reduces memory usage compared to 8-bit precision. 
+            Defaults to `False`.
         max_new_tokens (int, optional): Maximum number of new tokens to generate during inference.
-            This limits the length of the generated sequence. Defaults to 100, with a possible maximum of 1024.
+            This limits the length of the generated sequence. 
+            Defaults to `100`, with a possible maximum of `1024`.
 
     """
 
